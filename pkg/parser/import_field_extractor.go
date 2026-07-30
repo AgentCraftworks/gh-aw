@@ -836,6 +836,7 @@ func mergeObservabilityConfigs(configs []string) string {
 	var allEndpoints []observabilityImportEndpoint
 	mergedAttrs := make(map[string]string)
 	var mergedGitHubApp map[string]any
+	var mergedIfMissing string
 
 	for i, cfgJSON := range configs {
 		if cfgJSON == "" {
@@ -861,6 +862,9 @@ func mergeObservabilityConfigs(configs []string) string {
 		if mergedGitHubApp == nil {
 			mergedGitHubApp = extractOTLPGitHubAppFromObsMap(obs)
 		}
+		if mergedIfMissing == "" {
+			mergedIfMissing = extractOTLPIfMissingFromObsMap(obs)
+		}
 	}
 
 	if len(allEndpoints) == 0 && len(mergedAttrs) == 0 && mergedGitHubApp == nil {
@@ -879,6 +883,9 @@ func mergeObservabilityConfigs(configs []string) string {
 	}
 	if mergedGitHubApp != nil {
 		otlpMap["github-app"] = mergedGitHubApp
+	}
+	if mergedIfMissing != "" {
+		otlpMap["if-missing"] = mergedIfMissing
 	}
 	merged := map[string]any{"otlp": otlpMap}
 	b, err := json.Marshal(merged)
@@ -912,6 +919,35 @@ func extractOTLPGitHubAppFromObsMap(obs map[string]any) map[string]any {
 	copyMap := make(map[string]any, len(githubAppMap))
 	maps.Copy(copyMap, githubAppMap)
 	return copyMap
+}
+
+// extractOTLPIfMissingFromObsMap reads observability.otlp.if-missing from a
+// raw observability map and returns the normalised mode string ("error", "warn",
+// "ignore"), or empty string when absent or invalid.
+//
+// Note: this intentionally duplicates the logic of
+// workflow.extractRawOTLPIfMissing.  The parser package must not import the
+// workflow package (circular-dependency risk), so the helper lives here as a
+// local copy.  Both implementations must stay in sync.
+func extractOTLPIfMissingFromObsMap(obs map[string]any) string {
+	if obs == nil {
+		return ""
+	}
+	otlpAny, ok := obs["otlp"]
+	if !ok {
+		return ""
+	}
+	otlpMap, ok := otlpAny.(map[string]any)
+	if !ok {
+		return ""
+	}
+	v, _ := otlpMap["if-missing"].(string)
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "error", "warn", "ignore":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return ""
+	}
 }
 
 // extractOTLPAttributesFromObsMap reads the custom OTLP attributes map from a

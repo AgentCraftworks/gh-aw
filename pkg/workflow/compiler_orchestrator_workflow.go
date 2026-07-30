@@ -269,12 +269,18 @@ func (c *Compiler) mergeImportedObservability(workflowData *WorkflowData, merged
 	if githubApp == nil {
 		githubApp = extractRawOTLPGitHubAppMap(importedObs)
 	}
+	// Main workflow if-missing takes precedence; fall back to import's value.
+	ifMissing := extractRawOTLPIfMissing(mainObs)
+	if ifMissing == "" {
+		ifMissing = extractRawOTLPIfMissing(importedObs)
+	}
 	applyMergedRawObservability(
 		workflowData.RawFrontmatter,
 		mergedEndpoints,
 		mergedAttrs,
 		mergedResourceAttrs,
 		githubApp,
+		ifMissing,
 		mainCount,
 		importAdded,
 	)
@@ -316,6 +322,7 @@ func applyMergedRawObservability(
 	mergedAttrs map[string]string,
 	mergedResourceAttrs map[string]string,
 	githubApp map[string]any,
+	ifMissing string,
 	mainCount int,
 	importAdded int,
 ) {
@@ -334,6 +341,9 @@ func applyMergedRawObservability(
 	}
 	if githubApp != nil {
 		newOTLP["github-app"] = githubApp
+	}
+	if ifMissing != "" {
+		newOTLP["if-missing"] = ifMissing
 	}
 	rawFrontmatter["observability"] = map[string]any{"otlp": newOTLP}
 	orchestratorWorkflowLog.Printf("Merged OTLP endpoints into RawFrontmatter: %d from main workflow, %d from imports (%d total)", mainCount, importAdded, len(mergedEndpoints))

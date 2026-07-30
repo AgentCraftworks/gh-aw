@@ -5,6 +5,7 @@ network:
     - "*.grafana.net"
 observability:
   otlp:
+    if-missing: ignore
     endpoint:
       - url: ${{ secrets.GH_AW_OTEL_SENTRY_ENDPOINT }}
         headers:

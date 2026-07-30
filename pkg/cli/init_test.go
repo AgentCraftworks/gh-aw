@@ -364,9 +364,12 @@ func TestIsGHESHost(t *testing.T) {
 		{"ghes.example.com", true},      // GHES instance
 		{"github.mycompany.com", true},  // GHES custom domain
 		{"", false},                     // empty host
-		{"localhost", true},             // local dev instance counts as GHES
+		{"localhost", false},            // loopback — not a real GHES deployment
+		{"127.0.0.1", false},            // loopback IP — not a real GHES deployment
+		{"::1", false},                  // IPv6 loopback — not a real GHES deployment
 		{"ghes.example.com:8080", true}, // with port
 		{"github.com:443", false},       // github.com with port
+		{"localhost:8080", false},       // localhost with port
 	}
 
 	for _, tt := range tests {

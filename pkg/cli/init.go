@@ -311,9 +311,16 @@ func ensureMaintenanceWorkflow(ctx context.Context, verbose bool) error {
 
 // isGHESHost returns true when the given host is a GitHub Enterprise Server instance,
 // i.e. it is neither the public github.com nor a GitHub Enterprise Cloud tenant
-// (which uses the *.ghe.com domain).
+// (which uses the *.ghe.com domain), nor a loopback/local address.
 func isGHESHost(host string) bool {
-	// Strip optional port (e.g. "ghes.example.com:8080" → "ghes.example.com")
+	// Strip optional port for standard host:port notation.
+	// For bare IPv6 addresses (e.g. "::1") there is no colon-delimited port, but
+	// LastIndex would incorrectly strip part of the address.  We detect the
+	// bare-IPv6 case by checking whether the pre-strip value is already a known
+	// loopback address before doing any stripping.
+	if host == "::1" {
+		return false
+	}
 	if idx := strings.LastIndex(host, ":"); idx >= 0 {
 		host = host[:idx]
 	}
@@ -325,6 +332,12 @@ func isGHESHost(host string) bool {
 	}
 	// GitHub Enterprise Cloud tenants end with .ghe.com — not GHES
 	if strings.HasSuffix(host, ".ghe.com") {
+		return false
+	}
+	// Loopback/local addresses are not real GHES deployments — they are used by
+	// local development tools and sandbox environments (e.g. the gh-aw agent runner)
+	// and should not trigger GHES artifact compatibility mode.
+	if host == "localhost" || host == "127.0.0.1" {
 		return false
 	}
 	return true

@@ -269,6 +269,14 @@ func (c *Compiler) mergeImportedObservability(workflowData *WorkflowData, merged
 	if githubApp == nil {
 		githubApp = extractRawOTLPGitHubAppMap(importedObs)
 	}
+	// Merge if-missing: main workflow's value takes precedence; fall back to imported.
+	// Note: ParsedFrontmatter.Observability.OTLP.IfMissing (from the compiled main workflow
+	// frontmatter) is checked first by getOTLPIfMissingMode before RawFrontmatter, so the
+	// main workflow always wins even if we propagate an imported value here.
+	ifMissing := extractOTLPIfMissingFromObsMap(mainObs)
+	if ifMissing == "" {
+		ifMissing = extractOTLPIfMissingFromObsMap(importedObs)
+	}
 	applyMergedRawObservability(
 		workflowData.RawFrontmatter,
 		mergedEndpoints,
@@ -277,6 +285,7 @@ func (c *Compiler) mergeImportedObservability(workflowData *WorkflowData, merged
 		githubApp,
 		mainCount,
 		importAdded,
+		ifMissing,
 	)
 }
 
@@ -318,8 +327,9 @@ func applyMergedRawObservability(
 	githubApp map[string]any,
 	mainCount int,
 	importAdded int,
+	ifMissing string,
 ) {
-	if len(mergedEndpoints) == 0 && len(mergedAttrs) == 0 && len(mergedResourceAttrs) == 0 && githubApp == nil {
+	if len(mergedEndpoints) == 0 && len(mergedAttrs) == 0 && len(mergedResourceAttrs) == 0 && githubApp == nil && ifMissing == "" {
 		return
 	}
 	newOTLP := map[string]any{}
@@ -335,6 +345,9 @@ func applyMergedRawObservability(
 	if githubApp != nil {
 		newOTLP["github-app"] = githubApp
 	}
+	if ifMissing != "" {
+		newOTLP["if-missing"] = ifMissing
+	}
 	rawFrontmatter["observability"] = map[string]any{"otlp": newOTLP}
 	orchestratorWorkflowLog.Printf("Merged OTLP endpoints into RawFrontmatter: %d from main workflow, %d from imports (%d total)", mainCount, importAdded, len(mergedEndpoints))
 	if len(mergedAttrs) > 0 {
@@ -342,6 +355,9 @@ func applyMergedRawObservability(
 	}
 	if len(mergedResourceAttrs) > 0 {
 		orchestratorWorkflowLog.Printf("Merged %d OTLP resource attributes into RawFrontmatter", len(mergedResourceAttrs))
+	}
+	if ifMissing != "" {
+		orchestratorWorkflowLog.Printf("Propagated if-missing=%q into RawFrontmatter from merged observability", ifMissing)
 	}
 }
 

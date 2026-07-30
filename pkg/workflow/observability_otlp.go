@@ -658,6 +658,24 @@ func extractRawOTLPGitHubAppMap(obs map[string]any) map[string]any {
 	return copied
 }
 
+// extractRawOTLPIfMissing returns observability.otlp.if-missing as a normalized
+// mode string when present and valid, or empty string otherwise.
+func extractRawOTLPIfMissing(obs map[string]any) string {
+	if obs == nil {
+		return ""
+	}
+	otlpAny, ok := obs["otlp"]
+	if !ok {
+		return ""
+	}
+	otlpMap, ok := otlpAny.(map[string]any)
+	if !ok {
+		return ""
+	}
+	v, _ := otlpMap["if-missing"].(string)
+	return normalizeOTLPIfMissingMode(v)
+}
+
 // endpoint entry.  Duplicate pairs are included as-is; the result is used only
 // for secret-masking and contains no sensitive data itself after runtime
 // expression substitution by GitHub Actions.

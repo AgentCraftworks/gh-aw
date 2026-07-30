@@ -138,6 +138,69 @@ imports:
 	}
 }
 
+// TestCompileWorkflow_IfMissingPropagatedFromImport verifies that when a shared
+// workflow import sets observability.otlp.if-missing, the compiled lock file
+// includes the GH_AW_OTLP_IF_MISSING env var, which causes start_mcp_gateway.cjs
+// to gracefully skip the MCP gateway opentelemetry section when the endpoint
+// secret is unset at runtime (instead of failing validation).
+func TestCompileWorkflow_IfMissingPropagatedFromImport(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Simulate shared/otlp.md: sets if-missing: ignore alongside secret-based endpoints.
+	importedPath := filepath.Join(tmpDir, "shared-otlp.md")
+	importedContent := `---
+network:
+  allowed:
+    - "*.example.com"
+observability:
+  otlp:
+    if-missing: ignore
+    endpoint:
+      - url: ${{ secrets.OTEL_ENDPOINT }}
+        headers:
+          Authorization: ${{ secrets.OTEL_AUTH }}
+---
+`
+	if err := os.WriteFile(importedPath, []byte(importedContent), 0o644); err != nil {
+		t.Fatalf("Failed to write imported workflow: %v", err)
+	}
+
+	workflowPath := filepath.Join(tmpDir, "main-workflow.md")
+	content := `---
+on: push
+permissions:
+  contents: read
+engine: copilot
+imports:
+  - ./shared-otlp.md
+---
+
+# Test if-missing propagation from import
+`
+	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to write main workflow: %v", err)
+	}
+
+	compiler := NewCompiler()
+	if err := compiler.CompileWorkflow(workflowPath); err != nil {
+		t.Fatalf("Unexpected compile error: %v", err)
+	}
+
+	lockPath := filepath.Join(tmpDir, "main-workflow.lock.yml")
+	lockContent, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("Failed to read lock file: %v", err)
+	}
+
+	compiled := string(lockContent)
+	if !strings.Contains(compiled, "GH_AW_OTLP_IF_MISSING: ignore") {
+		t.Fatal("Expected GH_AW_OTLP_IF_MISSING: ignore env var when if-missing: ignore is set in import")
+	}
+	if !strings.Contains(compiled, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Fatal("Expected OTEL_EXPORTER_OTLP_ENDPOINT env var to be injected")
+	}
+}
+
 // TestCompileWorkflow_MasksOTLPHeadersWhenConfigured verifies that the compiled
 // workflow includes a masking step that calls mask_otlp_headers.sh in all
 // relevant jobs when headers are configured.

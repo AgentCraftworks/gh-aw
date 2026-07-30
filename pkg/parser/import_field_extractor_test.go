@@ -640,6 +640,31 @@ func TestMergeObservabilityConfigs(t *testing.T) {
 		assert.Contains(t, got, `"app-id":"${{ vars.APP_ID }}"`, "should preserve app-id")
 		assert.Contains(t, got, `"private-key":"${{ secrets.APP_PRIVATE_KEY }}"`, "should preserve private-key")
 	})
+
+	t.Run("if-missing from single import is propagated", func(t *testing.T) {
+		configs := []string{`{"otlp":{"if-missing":"ignore","endpoint":"https://traces.example.com:4317"}}`}
+		got := mergeObservabilityConfigs(configs)
+		require.NotEmpty(t, got, "should produce merged result")
+		assert.Contains(t, got, `"if-missing":"ignore"`, "should propagate if-missing from import")
+	})
+
+	t.Run("if-missing first occurrence wins across multiple imports", func(t *testing.T) {
+		configs := []string{
+			`{"otlp":{"if-missing":"warn","endpoint":"https://a.example.com:4317"}}`,
+			`{"otlp":{"if-missing":"ignore","endpoint":"https://b.example.com:4317"}}`,
+		}
+		got := mergeObservabilityConfigs(configs)
+		require.NotEmpty(t, got, "should produce merged result")
+		assert.Contains(t, got, `"if-missing":"warn"`, "first import if-missing should win")
+		assert.NotContains(t, got, `"if-missing":"ignore"`, "second import if-missing should not override first")
+	})
+
+	t.Run("invalid if-missing value is ignored", func(t *testing.T) {
+		configs := []string{`{"otlp":{"if-missing":"invalid","endpoint":"https://traces.example.com:4317"}}`}
+		got := mergeObservabilityConfigs(configs)
+		require.NotEmpty(t, got, "should produce merged result")
+		assert.NotContains(t, got, `"if-missing"`, "invalid if-missing value should not appear in output")
+	})
 }
 
 func TestExtractConfigFields_FirstWinsAndAccumulates(t *testing.T) {

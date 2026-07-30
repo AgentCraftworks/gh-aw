@@ -386,6 +386,58 @@ func TestMergeImportedObservability_MergesResourceAttributesWithMainPrecedence(t
 	}, otlp["resource-attributes"])
 }
 
+// TestMergeImportedObservability_PropagatesIfMissingFromImport verifies that
+// observability.otlp.if-missing set in an imported shared workflow is
+// propagated into RawFrontmatter when the main workflow does not set it.
+func TestMergeImportedObservability_PropagatesIfMissingFromImport(t *testing.T) {
+	importedObsJSON, err := json.Marshal(map[string]any{
+		"otlp": map[string]any{
+			"if-missing": "ignore",
+			"endpoint":   []any{map[string]any{"url": "${{ secrets.OTEL_ENDPOINT }}"}},
+		},
+	})
+	require.NoError(t, err)
+
+	workflowData := &WorkflowData{
+		RawFrontmatter: map[string]any{},
+	}
+
+	NewCompiler().mergeImportedObservability(workflowData, string(importedObsJSON))
+
+	obs := workflowData.RawFrontmatter["observability"].(map[string]any)
+	otlp := obs["otlp"].(map[string]any)
+	assert.Equal(t, "ignore", otlp["if-missing"], "if-missing from import should propagate to RawFrontmatter")
+}
+
+// TestMergeImportedObservability_MainIfMissingTakesPrecedence verifies that
+// the main workflow's if-missing setting overrides the imported value.
+func TestMergeImportedObservability_MainIfMissingTakesPrecedence(t *testing.T) {
+	importedObsJSON, err := json.Marshal(map[string]any{
+		"otlp": map[string]any{
+			"if-missing": "ignore",
+			"endpoint":   []any{map[string]any{"url": "${{ secrets.OTEL_ENDPOINT }}"}},
+		},
+	})
+	require.NoError(t, err)
+
+	workflowData := &WorkflowData{
+		RawFrontmatter: map[string]any{
+			"observability": map[string]any{
+				"otlp": map[string]any{
+					"if-missing": "warn",
+					"endpoint":   []any{map[string]any{"url": "${{ secrets.MAIN_OTEL }}"}},
+				},
+			},
+		},
+	}
+
+	NewCompiler().mergeImportedObservability(workflowData, string(importedObsJSON))
+
+	obs := workflowData.RawFrontmatter["observability"].(map[string]any)
+	otlp := obs["otlp"].(map[string]any)
+	assert.Equal(t, "warn", otlp["if-missing"], "main workflow if-missing should take precedence over import")
+}
+
 func TestBuildMergedEnvSources_MainWorkflowWins(t *testing.T) {
 	mergedEnv := map[string]any{
 		"MAIN_ONLY":   "1",

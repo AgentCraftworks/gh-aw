@@ -240,6 +240,28 @@ func normalizeOTLPIfMissingMode(mode string) string {
 	}
 }
 
+// extractOTLPIfMissingFromObsMap reads the observability.otlp.if-missing field from
+// a raw observability section map (the value at rawFrontmatter["observability"]).
+// Returns "" when the field is absent, empty, or not a valid mode.
+func extractOTLPIfMissingFromObsMap(obs map[string]any) string {
+	if obs == nil {
+		return ""
+	}
+	otlpAny, ok := obs["otlp"]
+	if !ok {
+		return ""
+	}
+	otlpMap, ok := otlpAny.(map[string]any)
+	if !ok {
+		return ""
+	}
+	v, ok := otlpMap["if-missing"].(string)
+	if !ok {
+		return ""
+	}
+	return normalizeOTLPIfMissingMode(v)
+}
+
 // getOTLPIfMissingMode returns observability.otlp.if-missing mode.
 // Returns empty string when unset or invalid.
 func getOTLPIfMissingMode(config *FrontmatterConfig, frontmatter map[string]any) string {

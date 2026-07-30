@@ -386,6 +386,78 @@ func TestMergeImportedObservability_MergesResourceAttributesWithMainPrecedence(t
 	}, otlp["resource-attributes"])
 }
 
+func TestMergeImportedObservability_PropagatesIfMissingFromImport(t *testing.T) {
+	importedObsJSON, err := json.Marshal(map[string]any{
+		"otlp": map[string]any{
+			"if-missing": "ignore",
+			"endpoint": []any{
+				map[string]any{"url": "${{ secrets.OTLP_ENDPOINT }}"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	workflowData := &WorkflowData{
+		RawFrontmatter: map[string]any{},
+	}
+
+	NewCompiler().mergeImportedObservability(workflowData, string(importedObsJSON))
+
+	obs := workflowData.RawFrontmatter["observability"].(map[string]any)
+	otlp := obs["otlp"].(map[string]any)
+	assert.Equal(t, "ignore", otlp["if-missing"], "if-missing from import should propagate to raw frontmatter")
+}
+
+func TestMergeImportedObservability_MainIfMissingTakesPrecedenceOverImport(t *testing.T) {
+	importedObsJSON, err := json.Marshal(map[string]any{
+		"otlp": map[string]any{
+			"if-missing": "ignore",
+			"endpoint": []any{
+				map[string]any{"url": "${{ secrets.OTLP_ENDPOINT }}"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	workflowData := &WorkflowData{
+		RawFrontmatter: map[string]any{
+			"observability": map[string]any{
+				"otlp": map[string]any{
+					"if-missing": "warn", // main's value takes precedence
+				},
+			},
+		},
+	}
+
+	NewCompiler().mergeImportedObservability(workflowData, string(importedObsJSON))
+
+	obs := workflowData.RawFrontmatter["observability"].(map[string]any)
+	otlp := obs["otlp"].(map[string]any)
+	assert.Equal(t, "warn", otlp["if-missing"], "main workflow's if-missing should take precedence over import")
+}
+
+func TestMergeImportedObservability_IfMissingOmittedWhenNotSet(t *testing.T) {
+	importedObsJSON, err := json.Marshal(map[string]any{
+		"otlp": map[string]any{
+			"endpoint": []any{
+				map[string]any{"url": "https://traces.example.com/v1/traces"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	workflowData := &WorkflowData{
+		RawFrontmatter: map[string]any{},
+	}
+
+	NewCompiler().mergeImportedObservability(workflowData, string(importedObsJSON))
+
+	obs := workflowData.RawFrontmatter["observability"].(map[string]any)
+	otlp := obs["otlp"].(map[string]any)
+	_, hasIfMissing := otlp["if-missing"]
+	assert.False(t, hasIfMissing, "if-missing should not be set when neither main nor import configures it")
+}
+
 func TestBuildMergedEnvSources_MainWorkflowWins(t *testing.T) {
 	mergedEnv := map[string]any{
 		"MAIN_ONLY":   "1",

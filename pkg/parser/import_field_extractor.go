@@ -829,13 +829,15 @@ func extractOTLPEndpointsFromObsMap(obs map[string]any) []observabilityImportEnd
 // array forms), deduplicates by URL (first occurrence wins), and returns a single merged
 // observability JSON string with all endpoints expressed as an array.  Custom OTLP
 // attributes are also merged across imports (first occurrence wins per key).
-// Returns "" when no valid endpoints or attributes are found.
+// The if-missing mode is propagated from the first import that sets it.
+// Returns "" when no valid endpoints, attributes, or other config are found.
 func mergeObservabilityConfigs(configs []string) string {
 	seen := make(map[string]struct {
 	})
 	var allEndpoints []observabilityImportEndpoint
 	mergedAttrs := make(map[string]string)
 	var mergedGitHubApp map[string]any
+	var mergedIfMissing string
 
 	for i, cfgJSON := range configs {
 		if cfgJSON == "" {
@@ -861,9 +863,12 @@ func mergeObservabilityConfigs(configs []string) string {
 		if mergedGitHubApp == nil {
 			mergedGitHubApp = extractOTLPGitHubAppFromObsMap(obs)
 		}
+		if mergedIfMissing == "" {
+			mergedIfMissing = extractOTLPIfMissingFromObsMap(obs)
+		}
 	}
 
-	if len(allEndpoints) == 0 && len(mergedAttrs) == 0 && mergedGitHubApp == nil {
+	if len(allEndpoints) == 0 && len(mergedAttrs) == 0 && mergedGitHubApp == nil && mergedIfMissing == "" {
 		return ""
 	}
 
@@ -880,6 +885,9 @@ func mergeObservabilityConfigs(configs []string) string {
 	if mergedGitHubApp != nil {
 		otlpMap["github-app"] = mergedGitHubApp
 	}
+	if mergedIfMissing != "" {
+		otlpMap["if-missing"] = mergedIfMissing
+	}
 	merged := map[string]any{"otlp": otlpMap}
 	b, err := json.Marshal(merged)
 	if err != nil {
@@ -887,6 +895,32 @@ func mergeObservabilityConfigs(configs []string) string {
 		return ""
 	}
 	return string(b)
+}
+
+// extractOTLPIfMissingFromObsMap reads the observability.otlp.if-missing field from
+// a raw observability section map. Returns "" when the field is absent or not a valid
+// if-missing mode. Valid modes are: "ignore", "warn", "error".
+func extractOTLPIfMissingFromObsMap(obs map[string]any) string {
+	if obs == nil {
+		return ""
+	}
+	otlpAny, ok := obs["otlp"]
+	if !ok {
+		return ""
+	}
+	otlpMap, ok := otlpAny.(map[string]any)
+	if !ok {
+		return ""
+	}
+	v, ok := otlpMap["if-missing"].(string)
+	if !ok {
+		return ""
+	}
+	switch strings.TrimSpace(v) {
+	case "ignore", "warn", "error":
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 func extractOTLPGitHubAppFromObsMap(obs map[string]any) map[string]any {

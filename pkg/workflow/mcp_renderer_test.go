@@ -560,7 +560,7 @@ func TestRenderJSONMCPConfig_OTLPGateway(t *testing.T) {
 		{
 			name:         "OTLP endpoint and headers",
 			otlpEndpoint: "https://otel.example.com:4318",
-			otlpHeaders:  "Authorization=Bearer token123",
+			otlpHeaders:  "Authorization=******",
 			wantEndpoint: true,
 		},
 		{
@@ -568,6 +568,12 @@ func TestRenderJSONMCPConfig_OTLPGateway(t *testing.T) {
 			otlpEndpoint: "",
 			otlpHeaders:  "",
 			wantEndpoint: false,
+		},
+		{
+			name:         "OTLP endpoint as GitHub Actions secret expression",
+			otlpEndpoint: "${{ secrets.OTEL_ENDPOINT }}",
+			otlpHeaders:  "",
+			wantEndpoint: true,
 		},
 	}
 
@@ -618,12 +624,29 @@ func TestRenderJSONMCPConfig_OTLPGateway(t *testing.T) {
 				t.Errorf("headers field must not appear in gateway JSON config (use OTEL_EXPORTER_OTLP_HEADERS env var instead)\noutput:\n%s", result)
 			}
 
-			// Verify endpoint is present iff configured
-			if tt.wantEndpoint && !strings.Contains(result, `"endpoint": "${OTEL_EXPORTER_OTLP_ENDPOINT}"`) {
-				t.Errorf("expected endpoint in output\noutput:\n%s", result)
+			// Verify endpoint conditional is present iff configured.
+			// The opentelemetry section is now generated via a runtime bash conditional
+			// (GH_AW_MCP_OTEL_SECTION) so it is only included when
+			// OTEL_EXPORTER_OTLP_ENDPOINT is non-empty at runtime. This prevents schema
+			// validation failures when secrets are not provisioned.
+			if tt.wantEndpoint {
+				if !strings.Contains(result, "GH_AW_MCP_OTEL_SECTION") {
+					t.Errorf("expected GH_AW_MCP_OTEL_SECTION bash conditional in output\noutput:\n%s", result)
+				}
+				if !strings.Contains(result, `if [ -n "${OTEL_EXPORTER_OTLP_ENDPOINT}"`) {
+					t.Errorf("expected runtime guard 'if [ -n \"${OTEL_EXPORTER_OTLP_ENDPOINT}\"' in output\noutput:\n%s", result)
+				}
+				if !strings.Contains(result, "${GH_AW_MCP_OTEL_SECTION}") {
+					t.Errorf("expected ${GH_AW_MCP_OTEL_SECTION} placeholder in heredoc\noutput:\n%s", result)
+				}
 			}
-			if !tt.wantEndpoint && strings.Contains(result, `"opentelemetry"`) {
-				t.Errorf("expected no opentelemetry section when no endpoint configured\noutput:\n%s", result)
+			if !tt.wantEndpoint {
+				if strings.Contains(result, `"opentelemetry"`) {
+					t.Errorf("expected no opentelemetry section when no endpoint configured\noutput:\n%s", result)
+				}
+				if strings.Contains(result, "GH_AW_MCP_OTEL_SECTION") {
+					t.Errorf("expected no GH_AW_MCP_OTEL_SECTION when no endpoint configured\noutput:\n%s", result)
+				}
 			}
 		})
 	}

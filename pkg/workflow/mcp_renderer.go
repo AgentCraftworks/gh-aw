@@ -207,20 +207,18 @@ func RenderJSONMCPConfig(
 			}
 			fmt.Fprintf(&configBuilder, ",\n              \"toolTimeout\": %d", toolTimeoutSeconds)
 		}
-		// When OTLP tracing is configured, add the opentelemetry section directly to the
-		// gateway config. The endpoint is passed via the OTEL_EXPORTER_OTLP_ENDPOINT env var
-		// (injected by injectOTLPConfig) so that secrets are never interpolated directly into
-		// the run block (RGS-008 compliance). All four fields use ${VARIABLE_NAME} expressions
-		// expanded by bash from workflow-level env vars.
+		// When OTLP tracing is configured, the opentelemetry gateway section is guarded by a
+		// runtime bash conditional so it is only emitted when OTEL_EXPORTER_OTLP_ENDPOINT is
+		// non-empty. When the endpoint is a GitHub Actions secret expression (e.g.
+		// ${{ secrets.OTEL_ENDPOINT }}) and the secret is not provisioned, the expression
+		// expands to an empty string at runtime. Sending an empty endpoint to the MCP gateway
+		// triggers a schema validation failure ("length must be >= 1, but got 0"). The
+		// bash conditional ensures the section is omitted entirely in that case.
 		// Per MCP Gateway Specification §4.1.3.7 and the opentelemetryConfig schema.
 		// Note: OTEL_EXPORTER_OTLP_HEADERS is passed as a container env var (not in the JSON
 		// config) so that auth credentials are not embedded in the stdin JSON config pipe.
 		if options.GatewayConfig.OTLPEndpoint != "" {
-			configBuilder.WriteString(",\n              \"opentelemetry\": {\n")
-			configBuilder.WriteString("                \"endpoint\": \"${OTEL_EXPORTER_OTLP_ENDPOINT}\",\n")
-			configBuilder.WriteString("                \"traceId\": \"${GITHUB_AW_OTEL_TRACE_ID}\",\n")
-			configBuilder.WriteString("                \"spanId\": \"${GITHUB_AW_OTEL_PARENT_SPAN_ID}\"\n")
-			configBuilder.WriteString("              }")
+			configBuilder.WriteString("${GH_AW_MCP_OTEL_SECTION}")
 		}
 		configBuilder.WriteString("\n")
 		configBuilder.WriteString("            }\n")
@@ -236,6 +234,22 @@ func RenderJSONMCPConfig(
 	delimiter := GenerateHeredocDelimiterFromContent("MCP_CONFIG", generatedConfig)
 	// Resolve the node binary to its absolute path so the command is robust
 	// against PATH modifications that may occur later in the workflow.
+	//
+	// When OTLP is configured, emit a bash conditional that builds the gateway
+	// opentelemetry JSON section only when OTEL_EXPORTER_OTLP_ENDPOINT is non-empty
+	// at runtime. The GH_AW_MCP_OTEL_SECTION variable is then expanded inside the
+	// heredoc at the ${GH_AW_MCP_OTEL_SECTION} placeholder position.
+	if options.GatewayConfig != nil && options.GatewayConfig.OTLPEndpoint != "" {
+		yaml.WriteString("          GH_AW_MCP_OTEL_SECTION=\"\"\n")
+		yaml.WriteString("          if [ -n \"${OTEL_EXPORTER_OTLP_ENDPOINT}\" ]; then\n")
+		yaml.WriteString("            GH_AW_MCP_OTEL_SECTION=\",\n")
+		yaml.WriteString("              \\\"opentelemetry\\\": {\n")
+		yaml.WriteString("                \\\"endpoint\\\": \\\"${OTEL_EXPORTER_OTLP_ENDPOINT}\\\",\n")
+		yaml.WriteString("                \\\"traceId\\\": \\\"${GITHUB_AW_OTEL_TRACE_ID}\\\",\n")
+		yaml.WriteString("                \\\"spanId\\\": \\\"${GITHUB_AW_OTEL_PARENT_SPAN_ID}\\\"\n")
+		yaml.WriteString("              }\"\n")
+		yaml.WriteString("          fi\n")
+	}
 	yaml.WriteString("          GH_AW_NODE=$(which node 2>/dev/null || command -v node 2>/dev/null || echo node)\n")
 	// Write the configuration to the YAML output
 	yaml.WriteString("          cat << " + delimiter + " | \"$GH_AW_NODE\" \"${RUNNER_TEMP}/gh-aw/actions/start_mcp_gateway.cjs\"\n")

@@ -2,7 +2,7 @@
   "counts": {
     "semgrep_output_format": {
       "structured_sections": 16,
-      "prose": 13,
+      "prose": 14,
       "bullet_list": 6
     }
   },
@@ -250,6 +250,13 @@
       "timestamp": "2026-08-02T05:32:58.539Z",
       "assignments": {
         "semgrep_output_format": "structured_sections"
+      }
+    },
+    {
+      "run_id": "30787557873",
+      "timestamp": "2026-08-03T05:35:41.536Z",
+      "assignments": {
+        "semgrep_output_format": "prose"
       }
     }
   ]

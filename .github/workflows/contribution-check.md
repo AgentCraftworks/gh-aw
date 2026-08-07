@@ -17,9 +17,8 @@ env:
   TARGET_REPOSITORY: ${{ vars.TARGET_REPOSITORY || github.repository }}
 
 engine:
-  id: copilot
+  id: claude
   agent: contribution-checker
-  max-continuations: 25
 
 imports:
   - shared/otlp.md

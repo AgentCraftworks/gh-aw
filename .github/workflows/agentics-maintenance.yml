@@ -40,7 +40,7 @@ on:
     - cron: "37 */2 * * *"  # Every 2 hours (based on minimum expires: 1 days)
   push:
     branches:
-      - main
+      - staging
     paths:
       - '.github/workflows/*.md'
   issues:

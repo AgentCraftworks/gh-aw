@@ -68,10 +68,15 @@ func (c *Compiler) generateCheckoutActionsFolder(data *WorkflowData) []string {
 			fmt.Sprintf("        uses: %s\n", getActionPin("actions/checkout")),
 			"        with:\n",
 			"          repository: github/gh-aw\n",
+		}
+		if ref := versionToGitRef(c.version); ref != "" {
+			lines = append(lines, fmt.Sprintf("          ref: %s\n", ref))
+		}
+		lines = append(lines,
 			"          sparse-checkout: |\n",
 			"            actions\n",
 			"          persist-credentials: false\n",
-		}
+		)
 		return lines
 	}
 

@@ -377,6 +377,31 @@ func TestCheckoutActionsFolderDevModeAlwaysEmitsCheckout(t *testing.T) {
 	}
 }
 
+// TestCheckoutActionsFolderDevModePinsRefWhenCompilerVersionIsAvailable verifies that
+// dev mode still pins the gh-aw repo to a matching compiler ref when the compiler has a
+// concrete version, preventing checkout from falling back to the default branch and missing
+// runtime helper scripts.
+func TestCheckoutActionsFolderDevModePinsRefWhenCompilerVersionIsAvailable(t *testing.T) {
+	compiler := NewCompiler(WithVersion("v1.2.3"))
+	compiler.SetActionMode(ActionModeDev)
+
+	lines := compiler.generateCheckoutActionsFolder(nil)
+	combined := strings.Join(lines, "")
+	if !strings.Contains(combined, "ref: v1.2.3") {
+		t.Fatal("Dev mode checkout should pin the gh-aw ref when the compiler version is available")
+	}
+}
+
+// TestRestoreActionsSetupStepPinsRefWhenCompilerVersionIsAvailable ensures the repair step
+// re-checking out actions/setup from github/gh-aw also follows the compiler's version.
+func TestRestoreActionsSetupStepPinsRefWhenCompilerVersionIsAvailable(t *testing.T) {
+	compiler := NewCompiler(WithVersion("v1.2.3"))
+	step := compiler.generateRestoreActionsSetupStep()
+	if !strings.Contains(step, "ref: v1.2.3") {
+		t.Fatal("Restore actions setup step should pin the gh-aw ref when the compiler version is available")
+	}
+}
+
 // TestResolveSetupActionReferenceActionMode tests that action mode resolves to the external gh-aw-actions repo
 func TestResolveSetupActionReferenceActionMode(t *testing.T) {
 	ref := ResolveSetupActionReference(context.Background(), ActionModeAction, "v1.2.3", "", nil)

@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   issues: read
+  copilot-requests: write
 tools:
   cli-proxy: true
   github:

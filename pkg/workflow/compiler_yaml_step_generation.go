@@ -68,10 +68,15 @@ func (c *Compiler) generateCheckoutActionsFolder(data *WorkflowData) []string {
 			fmt.Sprintf("        uses: %s\n", getActionPin("actions/checkout")),
 			"        with:\n",
 			"          repository: github/gh-aw\n",
+		}
+		if ref := versionToGitRef(c.version); ref != "" {
+			lines = append(lines, fmt.Sprintf("          ref: %s\n", ref))
+		}
+		lines = append(lines,
 			"          sparse-checkout: |\n",
 			"            actions\n",
 			"          persist-credentials: false\n",
-		}
+		)
 		return lines
 	}
 
@@ -98,6 +103,9 @@ func (c *Compiler) generateRestoreActionsSetupStep() string {
 	fmt.Fprintf(&step, "        uses: %s\n", getActionPin("actions/checkout"))
 	step.WriteString("        with:\n")
 	step.WriteString("          repository: github/gh-aw\n")
+	if ref := versionToGitRef(c.version); ref != "" {
+		fmt.Fprintf(&step, "          ref: %s\n", ref)
+	}
 	step.WriteString("          sparse-checkout: |\n")
 	step.WriteString("            actions/setup\n")
 	step.WriteString("          sparse-checkout-cone-mode: true\n")
